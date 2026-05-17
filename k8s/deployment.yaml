@@ -1,0 +1,160 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: swp
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: swp-backend
+  namespace: swp
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: swp-secrets
+  namespace: swp
+type: Opaque
+stringData:
+  DATABASE_URL: postgresql://swp_user:REPLACE@swp-postgres:5432/swp_db
+  REDIS_URL: redis://swp-redis:6379
+  JWT_SECRET: REPLACE_WITH_SECURE_SECRET
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: swp-backend
+  namespace: swp
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: swp-backend
+  template:
+    metadata:
+      labels:
+        app: swp-backend
+    spec:
+      serviceAccountName: swp-backend
+      containers:
+      - name: swp-backend
+        image: swp/backend:latest
+        ports:
+        - containerPort: 3000
+        envFrom:
+        - secretRef:
+            name: swp-secrets
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 10
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: swp-backend-svc
+  namespace: swp
+spec:
+  selector:
+    app: swp-backend
+  ports:
+  - port: 80
+    targetPort: 3000
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: swp-frontend
+  namespace: swp
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: swp-frontend
+  template:
+    metadata:
+      labels:
+        app: swp-frontend
+    spec:
+      containers:
+      - name: swp-frontend
+        image: swp/frontend:latest
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "100m"
+          limits:
+            memory: "128Mi"
+            cpu: "200m"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: swp-frontend-svc
+  namespace: swp
+spec:
+  selector:
+    app: swp-frontend
+  ports:
+  - port: 80
+    targetPort: 80
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: swp-ingress
+  namespace: swp
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  tls:
+  - hosts:
+    - api.smartpod.example.com
+    - app.smartpod.example.com
+    secretName: swp-tls
+  rules:
+  - host: api.smartpod.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: swp-backend-svc
+            port:
+              number: 80
+  - host: app.smartpod.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: swp-frontend-svc
+            port:
+              number: 80

@@ -1,0 +1,19 @@
+{
+  "name": "swp-iot-firmware",
+  "version": "0.1.0",
+  "description": "Smart Work-Study Pod IoT Edge Controller Firmware",
+  "scripts": {
+    "build": "platformio run",
+    "upload": "platformio run --target upload",
+    "monitor": "platformio device monitor",
+    "clean": "platformio run --target clean"
+  },
+  "dependencies": {
+    "mqtt": "^5.3.0",
+    "ArduinoJson": "^6.21.3",
+    "WiFiManager": "^2.1.1"
+  },
+  "devDependencies": {
+    "platformio": "^6.1.1"
+  }
+}

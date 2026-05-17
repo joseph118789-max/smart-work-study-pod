@@ -1,0 +1,101 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./src/backend
+    container_name: swp-backend
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DATABASE_URL=postgresql://swp_user:swp_password@swp-postgres:5432/swp_db
+      - REDIS_URL=redis://swp-redis:6379
+      - MQTT_URL=mqtt://swp-emqx:1883
+      - MQTT_USERNAME=admin
+      - MQTT_PASSWORD=public
+      - JWT_SECRET=swp-dev-secret-2026
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - swp-network
+
+  frontend:
+    build: ./src/frontend
+    container_name: swp-frontend
+    ports:
+      - "3001:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - swp-network
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: swp-postgres
+    environment:
+      POSTGRES_DB: swp_db
+      POSTGRES_USER: swp_user
+      POSTGRES_PASSWORD: swp_password
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U swp_user -d swp_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - swp-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: swp-redis
+    ports:
+      - "6381:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - swp-network
+
+  emqx:
+    image: emqx/emqx:5.3
+    container_name: swp-emqx
+    environment:
+      EMQX_NAME: swp-emqx
+      EMQX_HOST: 127.0.0.1
+      EMQX_Dashboard__default_username: admin
+      EMQX_Dashboard__default_password: public
+    ports:
+      - "1884:1883"
+      - "8884:8883"
+      - "8085:8083"
+      - "8086:8084"
+      - "18084:18083"
+    volumes:
+      - emqx_data:/opt/emqx/data
+      - emqx_logs:/opt/emqx/log
+    networks:
+      - swp-network
+
+networks:
+  swp-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  emqx_data:
+  emqx_logs:
